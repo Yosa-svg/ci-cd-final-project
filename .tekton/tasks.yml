@@ -1,0 +1,100 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: cd-pipeline
+spec:
+  workspaces:
+    - name: pipeline-workspace
+  tasks:
+    - name: clone
+      taskRef:
+        name: git-clone
+        kind: ClusterTask
+      workspaces:
+        - name: output
+          workspace: pipeline-workspace
+      params:
+        - name: url
+          value: https://github.com/Yosa-svg/ci-cd-final-project.git
+        - name: revision
+          value: main
+
+    - name: lint
+      taskRef:
+        name: nodejs-lint
+      runAfter:
+        - clone
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace
+      params:
+        - name: image
+          value: node:18-slim
+
+    - name: tests
+      taskRef:
+        name: nodejs-test
+      runAfter:
+        - lint
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace
+      params:
+        - name: image
+          value: node:18-slim
+
+    - name: cleanup
+      taskRef:
+        name: cleanup
+      runAfter:
+        - tests
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace
+
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: nodejs-lint
+spec:
+  workspaces:
+    - name: source
+  steps:
+    - name: lint
+      image: node:18-slim
+      workingDir: $(workspaces.source.path)
+      command: ["/bin/sh", "-c"]
+      args:
+        - npm install && npm run lint
+
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: nodejs-test
+spec:
+  workspaces:
+    - name: source
+  steps:
+    - name: jest
+      image: node:18-slim
+      workingDir: $(workspaces.source.path)
+      command: ["/bin/sh", "-c"]
+      args:
+        - npm install && npm test
+
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: cleanup
+spec:
+  workspaces:
+    - name: source
+  steps:
+    - name: cleanup
+      image: alpine:3
+      command: ["/bin/sh", "-c"]
+      args:
+        - rm -rf $(workspaces.source.path)/clone
